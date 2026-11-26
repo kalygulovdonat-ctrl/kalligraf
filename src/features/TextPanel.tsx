@@ -26,6 +26,19 @@ export function TextLeft({ job }: { job: BuiltJob }) {
     setDoc((d) => ({ ...d, text: txt, name: f.name.replace(/\.[^.]+$/, '') }));
     notify(`Загружен текст: ${f.name}`, 'success');
   };
+  const importPdf = async () => {
+    const f = await pickFile('.pdf,application/pdf');
+    if (!f) return;
+    try {
+      notify('Открываю PDF…');
+      const { openPdf, pdfText } = await import('../core/pdf');
+      const pdf = await openPdf(f);
+      const r = await pdfText(pdf, (s) => notify(s));
+      if (!r.text.trim()) return notify('В PDF не нашлось текста', 'error');
+      setDoc((d) => ({ ...d, text: r.text, name: f.name.replace(/.[^.]+$/, '') }));
+      notify(r.scanned ? 'Текст распознан со скана — проверьте ошибки' : `Загружен текст из PDF: ${pdf.numPages} стр.`, 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
+  };
   const insert = (s: string) => setDoc((d) => ({ ...d, text: d.text + (d.text && !d.text.endsWith('\n') ? '\n' : '') + s }));
 
   return (
@@ -36,6 +49,7 @@ export function TextLeft({ job }: { job: BuiltJob }) {
           <button className="btn small ghost" onClick={() => insert(new Date().toLocaleDateString('ru-RU'))} title="Вставить сегодняшнюю дату"><CalendarDays /></button>
           <button className="btn small ghost" onClick={() => setDoc((d) => ({ ...d, text: d.text + (d.text && !/\s$/.test(d.text) ? ' ' : '') + '$x^2$' }))} title="Вставить формулу $…$ (синтаксис LaTeX)">∑</button>
           <button className="btn small" onClick={importTxt} title="Загрузить текст из файла .txt"><FileUp />TXT</button>
+          <button className="btn small" onClick={importPdf} title="Взять текст из PDF (скан распознаётся как фото). Нарисовать страницу PDF — в «Рисунки» → «Фото → рисунок»"><FileUp />PDF</button>
         </div>
       </div>
       <textarea

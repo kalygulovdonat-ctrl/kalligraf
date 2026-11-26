@@ -11,6 +11,7 @@ import { toSvgD } from '../job';
 import { useProfile } from '../store';
 import { Check, Modal, Num, Slider } from '../ui/controls';
 import { loadPhoto } from './PhotoFont';
+import type { Pdf } from '../core/pdf';
 
 let worker: Worker | null = null;
 let seq = 0;
@@ -64,9 +65,36 @@ export function PhotoArt({ onClose, onAdd, maxWidth }: { onClose(): void; onAdd(
   const latest = useRef(0);
   const isFull = crop.x0 === 0 && crop.y0 === 0 && crop.x1 === 1 && crop.y1 === 1;
 
+  // PDF: страница рисуется в картинку и дальше обрабатывается как фото
+  const [pdfDoc, setPdfDoc] = useState<{ pdf: Pdf; page: number; name: string } | null>(null);
+  const loadPdfPage = async (pdf: Pdf, page: number, name: string) => {
+    setErr(''); setBusy(`Открываем страницу ${page} из PDF`); setLoaded(false);
+    try {
+      const { renderPage } = await import('../core/pdf');
+      const { canvas } = await renderPage(pdf, page, 6);
+      const blob = await new Promise<Blob>((r, j) => canvas.toBlob((b) => (b ? r(b) : j(new Error('страница не нарисовалась'))), 'image/png'));
+      const p = await loadPhoto(new File([blob], 'page.png', { type: 'image/png' }));
+      await call({ type: 'load', gray: p.gray });
+      setPdfDoc({ pdf, page, name });
+      setPhoto({ url: p.url, name: `${name}, стр. ${page}` });
+      setLoaded(true);
+    } catch (e) { setErr((e as Error).message); setBusy(''); }
+  };
+
   const onFile = async (f: File | null | undefined) => {
     if (!f) return;
-    if (!/^image\//.test(f.type)) return setErr('Нужна картинка (JPG, PNG, WebP…)');
+    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+      try {
+        setBusy('Открываем PDF');
+        const { openPdf } = await import('../core/pdf');
+        const pdf = await openPdf(f);
+        setStyle('lines');
+        await loadPdfPage(pdf, 1, f.name.replace(/\.pdf$/i, ''));
+      } catch (e) { setErr((e as Error).message); setBusy(''); }
+      return;
+    }
+    setPdfDoc(null);
+    if (!/^image\//.test(f.type)) return setErr('Нужна картинка (JPG, PNG, WebP…) или PDF');
     setErr(''); setBusy('Загружаем фото'); setLoaded(false);
     try {
       const p = await loadPhoto(f);
@@ -127,10 +155,10 @@ export function PhotoArt({ onClose, onAdd, maxWidth }: { onClose(): void; onAdd(
       {!photo ? (
         <div>
           <label className="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files?.[0]); }}>
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onFile(e.target.files?.[0])} />
+            <input type="file" accept="image/*,application/pdf,.pdf" style={{ display: 'none' }} onChange={(e) => onFile(e.target.files?.[0])} />
             <Camera style={{ width: 36, height: 36 }} />
-            <b>{busy || 'Выберите фото или перетащите сюда'}</b>
-            <span className="hint">Портрет, животное, здание, пейзаж. Лучше всего — чёткое фото с понятным объектом и спокойным фоном. Фото обрабатывается только на этом устройстве.</span>
+            <b>{busy || 'Выберите фото или PDF, или перетащите сюда'}</b>
+            <span className="hint">Портрет, животное, здание, пейзаж. Лучше всего — чёткое фото с понятным объектом и спокойным фоном. Из PDF рисуется страница — для чертежей и схем подойдёт стиль «Линии как есть». Фото обрабатывается только на этом устройстве.</span>
           </label>
           {err && <div className="err-box" style={{ marginTop: 12 }}>{err}</div>}
         </div>
@@ -167,8 +195,9 @@ export function PhotoArt({ onClose, onAdd, maxWidth }: { onClose(): void; onAdd(
               <Check label="Негатив" value={prep.invert} onChange={(v) => setPrep((p) => ({ ...p, invert: v }))} />
               <button className="btn small ghost" onClick={() => setPrep(defaultPrep)}><RotateCcw />Сбросить</button>
             </div>
+            {pdfDoc && pdfDoc.pdf.numPages > 1 && <Num label={`Страница PDF (из ${pdfDoc.pdf.numPages})`} value={pdfDoc.page} min={1} max={pdfDoc.pdf.numPages} step={1} onChange={(v) => loadPdfPage(pdfDoc.pdf, Math.round(v), pdfDoc.name)} />}
             <Num label={`Ширина рисунка, мм (до ${Math.floor(maxWidth)})`} value={widthMM} min={20} max={Math.floor(maxWidth)} step={5} onChange={setWidthMM} />
-            <button className="btn small ghost" onClick={() => { setPhoto(null); setLoaded(false); setRes(null); setCrop(fullCrop); setDraft(fullCrop); setRot(0); setCropping(false); }}>Другое фото</button>
+            <button className="btn small ghost" onClick={() => { setPhoto(null); setPdfDoc(null); setLoaded(false); setRes(null); setCrop(fullCrop); setDraft(fullCrop); setRot(0); setCropping(false); }}>Другое фото</button>
           </div>
           <div className="pa-preview">
             {cropping ? (

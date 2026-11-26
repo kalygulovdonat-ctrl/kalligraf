@@ -2,9 +2,10 @@
 // одна непрерывная линия (TSP-art), спираль, волны, скетч. Результат — пути в мм.
 import { chaikin, simplify, type Path, type Pt } from './geometry';
 import { downscale, thin, traceSkeleton, type Gray } from './vision';
+import { lineArt } from './lineart';
 import { mulberry32 } from './rng';
 
-export type ArtStyle = 'portrait' | 'contours' | 'hatch' | 'stipple' | 'tsp' | 'spiral' | 'waves' | 'sketch';
+export type ArtStyle = 'portrait' | 'contours' | 'hatch' | 'stipple' | 'tsp' | 'spiral' | 'waves' | 'sketch' | 'lines';
 
 export interface Prep {
   brightness: number;  // −100…100
@@ -34,6 +35,7 @@ export const STYLES: { id: ArtStyle; name: string; hint: string; uses: (keyof St
   { id: 'tsp', name: 'Одна линия', hint: 'Весь рисунок — одной непрерывной линией, без подъёма ручки.', uses: ['points', 'seed'] },
   { id: 'spiral', name: 'Спираль', hint: 'Спираль из центра, в тёмных местах — волнистая.', uses: ['spacing', 'amplitude'] },
   { id: 'waves', name: 'Волны', hint: 'Горизонтальные линии с волнами по яркости.', uses: ['spacing', 'amplitude'] },
+  { id: 'lines', name: 'Линии как есть', hint: 'Для чертежей, схем, страниц PDF и рисунков ручкой: каждая тёмная линия проходится один раз по центру.', uses: [] },
   { id: 'sketch', name: 'Скетч', hint: 'Как карандашом: контуры и лёгкая штриховка теней.', uses: ['detail', 'spacing', 'seed'] },
 ];
 
@@ -411,12 +413,15 @@ function waveLines(dark: (x: number, y: number) => number, w: number, h: number,
  */
 export function photoToPaths(src: Gray, style: ArtStyle, p: StyleParams, widthMM: number, onProgress?: (s: string) => void): Path[] {
   // Рабочее разрешение под стиль
-  const res: Record<ArtStyle, number> = { portrait: 650, contours: 700, hatch: 360, stipple: 300, tsp: 300, spiral: 360, waves: 360, sketch: 600 };
+  const res: Record<ArtStyle, number> = { portrait: 650, contours: 700, hatch: 360, stipple: 300, tsp: 300, spiral: 360, waves: 360, sketch: 600, lines: 1600 };
   const { img } = downscale(src, res[style]);
   const k = widthMM / img.w;            // мм на пиксель
   const mm = (v: number) => v / k;       // мм → пиксели
   onProgress?.('Обработка');
   switch (style) {
+    case 'lines':
+      onProgress?.('Обводим линии');
+      return lineArt(img, widthMM);
     case 'contours':
       return scalePaths(contourLines(img, p.detail, mm(p.minLen)), k);
     case 'hatch': {

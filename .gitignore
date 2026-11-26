@@ -6,3 +6,4 @@ mobile/public/ocr/
 *.keystore
 *.jks
 android/Kalligraf.apk
+/public/ocr/

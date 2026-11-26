@@ -29,11 +29,17 @@ function addF(s: string, max: number) {
 }
 
 /** Профиль машины для телефона: настройки GUANGKU, все скорости ≤ предела, переезды через G1. */
-export function mobileProfile(speed: number, swapPen: boolean): MachineProfile {
+export interface PenSetup { down: number; up: number; delay: number }
+export const PEN_DEFAULT: PenSetup = { down: 3, up: -1.5, delay: 0 };
+const z1 = (n: number) => Math.round(n * 10) / 10;
+
+export function mobileProfile(speed: number, swapPen: boolean, pen?: PenSetup): MachineProfile {
   const base = defaultProfile();
   const v = Math.max(50, Math.min(MAX_F, Math.round(speed)));
   let p: MachineProfile = { ...base, drawSpeed: v, travelSpeed: v, useG0ForTravel: false, workW: 210, workH: 300, offsetX: 0, offsetY: 0 };
-  if (swapPen) p = { ...p, penUp: base.penDown, penDown: base.penUp };
+  // высота ручки, настроенная на «Пульте» (ось Z: «пишет» и «поднята»)
+  if (pen) p = { ...p, penMode: 'custom', penDown: `G1 Z${z1(pen.down)} F600`, penUp: `G1 Z${z1(pen.up)} F600`, penDownDelay: Math.max(0, Math.min(1, pen.delay)) };
+  if (swapPen) p = { ...p, penUp: p.penDown, penDown: p.penUp };
   return { ...p, ...withPenFeed(p, Math.min(MAX_F, penFeed(p) ?? MAX_F)) };
 }
 

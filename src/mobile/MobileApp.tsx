@@ -8,10 +8,11 @@ import { boundsGcode, estimateJob, formatDuration, generateGcode, type MachinePr
 import { dryRunLines, resumePlan } from './jobs';
 import { appendSpoken, listen, recognizePhoto, signal, unlockAudio, voiceAvailable } from './native';
 import type { Path } from '../core/geometry';
+import type { Pdf } from '../core/pdf';
 import { GrblController } from '../grbl/controller';
 import { SerialTransport, SimTransport, serialSupported } from '../grbl/transport';
 import { AndroidTransport, androidUsbAvailable } from './androidTransport';
-import { MAX_F, limitLine, limitedTransport, mobileProfile } from './limit';
+import { MAX_F, PEN_DEFAULT, limitLine, limitedTransport, mobileProfile } from './limit';
 import { AUTHOR, COPYRIGHT } from '../author';
 
 // ── Машина ───────────────────────────────────────────────────────────
@@ -40,11 +41,13 @@ type Theme = 'auto' | 'light' | 'dark';
 interface Saved { name: string; text: string }
 interface Settings {
   fmt: Fmt; text: string; fontId: string; size: Size; speed: number; swap: boolean; accuracy: number;
+  zDown: number; zUp: number; penDelay: number;
   startLine: number; saved: Saved[]; recent: string[]; theme: Theme; big: boolean; sound: boolean;
 }
 const DEFAULTS: Settings = {
   fmt: 'nb', text: 'Привет! Это Каллиграф на телефоне.\nНапишите сюда текст и нажмите «Писать».',
   fontId: 'hw-caveat', size: 'm', speed: MAX_F, swap: false, accuracy: 7,
+  zDown: PEN_DEFAULT.down, zUp: PEN_DEFAULT.up, penDelay: 0,
   startLine: 1, recent: [], theme: 'auto', big: false, sound: true,
   saved: [
     { name: 'Заявление', text: 'Директору\nот ученика\n\nЗаявление.\n\nПрошу ' },
@@ -62,9 +65,10 @@ function loadSettings(): Settings {
 }
 
 /** То, что нужно, чтобы заново собрать ту же программу и продолжить после обрыва. */
-type Snap = Pick<Settings, 'fmt' | 'text' | 'fontId' | 'size' | 'swap' | 'accuracy' | 'startLine'>;
+type Snap = Pick<Settings, 'fmt' | 'text' | 'fontId' | 'size' | 'swap' | 'accuracy' | 'startLine'> & Partial<Pick<Settings, 'zDown' | 'zUp' | 'penDelay'>>;
 interface ResumeInfo { snap: Snap; acked: number; total: number }
-const snapOf = (s: Settings): Snap => ({ fmt: s.fmt, text: s.text, fontId: s.fontId, size: s.size, swap: s.swap, accuracy: s.accuracy, startLine: s.startLine });
+const snapOf = (s: Settings): Snap => ({ fmt: s.fmt, text: s.text, fontId: s.fontId, size: s.size, swap: s.swap, accuracy: s.accuracy, startLine: s.startLine, zDown: s.zDown, zUp: s.zUp, penDelay: s.penDelay });
+const penOf = (s: Partial<Pick<Settings, 'zDown' | 'zUp' | 'penDelay'>>) => ({ down: s.zDown ?? PEN_DEFAULT.down, up: s.zUp ?? PEN_DEFAULT.up, delay: s.penDelay ?? 0 });
 function loadResume(): ResumeInfo | null {
   try { return JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch { return null; }
 }
@@ -121,6 +125,19 @@ function prepare(st: Snap, prof: MachineProfile, userFonts: Font[] = []) {
   return { pages, lines, stats, missing: lay.missing };
 }
 
+/** Рисунок (страница PDF): вписываем в лист с полями и пишем как есть. */
+interface Art { name: string; paths: Path[]; w: number; h: number }
+function prepareArt(art: Art, fmt: Fmt, prof: MachineProfile) {
+  const sheet = SHEETS[fmt];
+  const m = 8;
+  const k = Math.min((sheet.w - 2 * m) / art.w, (sheet.h - 2 * m) / art.h);
+  const dx = (sheet.w - art.w * k) / 2, dy = (sheet.h - art.h * k) / 2;
+  const placed = art.paths.map((p) => ({ points: p.points.map(([x, y]) => [x * k + dx, y * k + dy] as [number, number]) }));
+  const paths = optimizePaths(placed, defaultOptimize, [0, 0]).paths;
+  const lines = generateGcode({ sections: [{ paths }], sheetH: sheet.h }, prof).map((l) => limitLine(l));
+  return { pages: [paths], lines, stats: estimateJob(paths, prof), missing: [] as string[] };
+}
+
 // ── Интерфейс ────────────────────────────────────────────────────────
 
 export function MobileApp() {
@@ -136,9 +153,10 @@ export function MobileApp() {
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* нет места */ } }, [st]);
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), msg.bad ? 6000 : 3000); return () => clearTimeout(t); } }, [msg]);
 
-  const prof = useMemo(() => mobileProfile(MAX_F, st.swap), [st.swap]); // скорость всегда максимальная (2000)
+  const prof = useMemo(() => mobileProfile(MAX_F, st.swap, penOf(st)), [st.swap, st.zDown, st.zUp, st.penDelay]); // скорость всегда максимальная (2000)
   const deferred = useDeferredValue(st);
-  const job = useMemo(() => prepare(deferred, prof, userFonts), [deferred, prof, userFonts]);
+  const [art, setArt] = useState<Art | null>(null);
+  const job = useMemo(() => (art ? prepareArt(art, deferred.fmt, prof) : prepare(deferred, prof, userFonts)), [art, deferred, prof, userFonts]);
   const pg = Math.min(page, job.pages.length - 1);
   const sheet = SHEETS[st.fmt];
 
@@ -162,7 +180,7 @@ export function MobileApp() {
   }
   async function demo() {
     const sim = new SimTransport({ speed: 4 });
-    sim.zDownHigh = !st.swap;
+    sim.zDownHigh = st.swap ? st.zUp > st.zDown : st.zDown > st.zUp;
     await ctl.attach(limitedTransport(sim));
     setMsg({ text: 'Демо: виртуальная машина' });
   }
@@ -207,6 +225,7 @@ export function MobileApp() {
   }
   function write() {
     if (!job.pages.some((p) => p.length)) return setMsg({ text: 'Напишите текст', bad: true });
+    if (art) { startJob(job.lines, { kind: 'test' }); return; } // рисунок: без «продолжить после обрыва»
     const snap = snapOf(st);
     if (startJob(job.lines, { kind: 'write', snap, headLen: 0, from: 0, total: job.lines.length })) {
       saveResume(null); setResume(null);
@@ -225,7 +244,7 @@ export function MobileApp() {
   }
   function continueResume() {
     if (!resume) return;
-    const rprof = mobileProfile(MAX_F, resume.snap.swap);
+    const rprof = mobileProfile(MAX_F, resume.snap.swap, penOf(resume.snap));
     const full = prepare(resume.snap, rprof, userFonts).lines;
     const plan = resumePlan(full, resume.acked, rprof);
     startJob(plan.lines, { kind: 'write', snap: resume.snap, headLen: plan.headLen, from: plan.from, total: full.length });
@@ -251,6 +270,45 @@ export function MobileApp() {
       setMsg({ text: 'Текст добавлен — проверьте ошибки' });
     } catch (e) { setMsg({ text: String((e as Error).message || e), bad: true }); }
     finally { setBusy(null); if (fileRef.current) fileRef.current.value = ''; }
+  }
+
+  // ── PDF: текст или страница-рисунок ──
+  const pdfRef = useRef<HTMLInputElement>(null);
+  const [pdf, setPdf] = useState<{ doc: Pdf; name: string; page: number } | null>(null);
+  async function openPdfFile(f: File | undefined) {
+    if (!f) return;
+    setBusy('Открываю PDF…');
+    try {
+      const { openPdf } = await import('../core/pdf');
+      setPdf({ doc: await openPdf(f), name: f.name.replace(/\.pdf$/i, ''), page: 1 });
+    } catch (e) { setMsg({ text: String((e as Error).message || e), bad: true }); }
+    finally { setBusy(null); if (pdfRef.current) pdfRef.current.value = ''; }
+  }
+  async function pdfToText() {
+    if (!pdf) return;
+    try {
+      const { pdfText } = await import('../core/pdf');
+      const r = await pdfText(pdf.doc, (s) => setBusy(s));
+      if (!r.text.trim()) throw new Error('В PDF не нашлось текста');
+      setArt(null);
+      set({ text: r.text });
+      setPdf(null);
+      setMsg({ text: r.scanned ? 'Текст распознан со скана — проверьте ошибки' : `Текст из PDF: ${pdf.doc.numPages} стр.` });
+    } catch (e) { setMsg({ text: String((e as Error).message || e), bad: true }); }
+    finally { setBusy(null); }
+  }
+  async function pdfToArt() {
+    if (!pdf) return;
+    setBusy(`Рисую страницу ${pdf.page}…`);
+    try {
+      const { pageLines } = await import('../core/pdf');
+      const r = await pageLines(pdf.doc, pdf.page);
+      if (!r.paths.length) throw new Error('На странице нет линий');
+      setArt({ name: `${pdf.name}, стр. ${pdf.page}`, paths: r.paths, w: r.wMM, h: r.hMM });
+      setPage(0);
+      setPdf(null);
+    } catch (e) { setMsg({ text: String((e as Error).message || e), bad: true }); }
+    finally { setBusy(null); }
   }
 
   // тема и крупный шрифт
@@ -303,10 +361,32 @@ export function MobileApp() {
                 </button>
               ))}
             </div>
-            <textarea className="m-text" value={st.text} disabled={running} onChange={(e) => set({ text: e.target.value })} placeholder="Текст для письма" rows={5} />
+            {art
+              ? <div className="m-banner info" style={{ margin: 0 }}>
+                  <span>Рисунок: {art.name}<small>Страница PDF вписана в лист. Текст сейчас не пишется.</small></span>
+                  <button className="m-btn small" disabled={running} onClick={() => setArt(null)}>Убрать рисунок</button>
+                </div>
+              : <textarea className="m-text" value={st.text} disabled={running} onChange={(e) => set({ text: e.target.value })} placeholder="Текст для письма" rows={5} />}
+            {pdf && (
+              <div className="m-saved">
+                <b>{pdf.name} — {pdf.doc.numPages} стр.</b>
+                <button className="m-btn primary" disabled={!!busy} onClick={pdfToText}>Взять текст{pdf.doc.numPages > 1 ? ' (все страницы)' : ''}</button>
+                <div className="m-stepper">
+                  <span>Нарисовать страницу</span>
+                  <button className="m-btn small" disabled={pdf.page <= 1} onClick={() => setPdf({ ...pdf, page: pdf.page - 1 })}>−</button>
+                  <b>{pdf.page}</b>
+                  <button className="m-btn small" disabled={pdf.page >= pdf.doc.numPages} onClick={() => setPdf({ ...pdf, page: pdf.page + 1 })}>＋</button>
+                </div>
+                <button className="m-btn" disabled={!!busy} onClick={pdfToArt}>Нарисовать страницу {pdf.page} линиями</button>
+                <button className="m-btn small" onClick={() => setPdf(null)}>Отмена</button>
+                <div className="m-hint">Текст напишется вашим почерком. «Нарисовать» — для чертежей и схем: машина обведёт линии страницы как есть. Если PDF — скан, текст распознается как с фото.</div>
+              </div>
+            )}
             <div className="m-tools">
               {voiceAvailable() && <button className="m-btn small" disabled={running || !!busy} onClick={voice}>🎤 Голос</button>}
               <button className="m-btn small" disabled={running || !!busy} onClick={() => fileRef.current?.click()}>📷 Фото</button>
+              <button className="m-btn small" disabled={running || !!busy} onClick={() => pdfRef.current?.click()}>📄 PDF</button>
+              <input ref={pdfRef} type="file" accept=".pdf,application/pdf" hidden onChange={(e) => openPdfFile(e.target.files?.[0])} />
               <button className={'m-btn small' + (showSaved ? ' on' : '')} disabled={running} onClick={() => setShowSaved(!showSaved)}>☆ Заготовки</button>
               <button className="m-btn small" disabled={running || !st.text} onClick={() => set({ text: '' })}>✕</button>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => photo(e.target.files?.[0])} />
@@ -416,6 +496,13 @@ function Pult({ prof, st, set, running, guard, setMsg }: {
   // Y машины растёт «от себя» (вверх по листу)
   const jog = (dx: number, dy: number) => guard(() => send(`$J=G91 G21 X${dx} Y${dy} F${MAX_F}`));
   const pos = c.status.wpos;
+  // высота ручки: что реально «пишет» и «поднята» (с учётом старой кнопки «поменять»)
+  const [zStep, setZStep] = useState(0.5);
+  const curZ = pos?.[2];
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const eff = st.swap ? { down: st.zUp, up: st.zDown } : { down: st.zDown, up: st.zUp };
+  const setPen = (down: number, up: number) => set({ zDown: down, zUp: up, swap: false });
+  const jogZ = (d: number) => guard(() => send(`$J=G91 G21 Z${d} F600`));
   return (
     <div className="m-pult">
       <div className="m-hint">Положение ручки: X <b>{pos ? pos[0].toFixed(1) : '—'}</b> · Y <b>{pos ? pos[1].toFixed(1) : '—'}</b> мм</div>
@@ -439,11 +526,48 @@ function Pult({ prof, st, set, running, guard, setMsg }: {
         <button className="m-btn primary" disabled={off} onClick={() => guard(async () => { await send('G10 L20 P1 X0 Y0'); setMsg({ text: 'Начало листа запомнено' }); })}>Здесь начало листа</button>
         <button className="m-btn" disabled={off} onClick={() => guard(async () => { await send(prof.penUp); await send(`G90 G1 X0 Y0 F${MAX_F}`); })}>В начало</button>
         <button className="m-btn" disabled={off} onClick={() => guard(() => send('$X'))}>Разблокировать</button>
-        <button className="m-btn" disabled={running} onClick={() => { set({ swap: !st.swap }); setMsg({ text: 'Вверх и вниз поменяны местами' }); }}>⇅ Поменять верх/низ</button>
+        <button className="m-btn" disabled={running} onClick={() => { setPen(eff.up, eff.down); setMsg({ text: 'Вверх и вниз поменяны местами' }); }}>⇅ Поменять верх/низ</button>
       </div>
       <div className="m-hint">
         Перед письмом: поставьте ручку кнопками в <b>левый верхний угол листа</b> и нажмите «Здесь начало листа».
         Если «Ручка вниз» поднимает ручку — нажмите «Поменять верх/низ».
+      </div>
+
+      <div className="m-section">Высота ручки</div>
+      <div className="m-hint">
+        1. Кнопками «Z» двигайте ручку и смотрите на неё. 2. Кончик <b>слегка прижат к бумаге</b> — «Здесь пишет».
+        3. Поднимите на 3–5 мм — «Здесь поднята». 4. Проверьте «Тест: линия 2 см».
+      </div>
+      <div className="m-seg small">
+        {[0.1, 0.5, 1].map((s) => <button key={s} className={zStep === s ? 'on' : ''} onClick={() => setZStep(s)}>шаг {String(s).replace('.', ',')} мм</button>)}
+      </div>
+      <div className="m-grid2">
+        <button className="m-btn" disabled={off} onClick={() => jogZ(-zStep)}>Z − {String(zStep).replace('.', ',')}</button>
+        <button className="m-btn" disabled={off} onClick={() => jogZ(zStep)}>Z + {String(zStep).replace('.', ',')}</button>
+      </div>
+      <div className="m-hint">Сейчас Z = <b>{curZ !== undefined ? curZ.toFixed(2) : '—'}</b> мм. На GUANGKU «Z +» обычно опускает ручку, «Z −» поднимает.</div>
+      <div className="m-grid2">
+        <button className="m-btn primary" disabled={off || curZ === undefined} onClick={() => { setPen(r1(curZ!), eff.up); setMsg({ text: `Запомнил: пишет при Z = ${r1(curZ!)}` }); }}>Здесь пишет</button>
+        <button className="m-btn primary" disabled={off || curZ === undefined} onClick={() => { setPen(eff.down, r1(curZ!)); setMsg({ text: `Запомнил: поднята при Z = ${r1(curZ!)}` }); }}>Здесь поднята</button>
+      </div>
+      {([['Пишет при Z', 'down'], ['Поднята при Z', 'up']] as const).map(([label, k]) => (
+        <div key={k} className="m-stepper">
+          <span>{label}</span>
+          <button className="m-btn small" disabled={running} onClick={() => k === 'down' ? setPen(r1(eff.down - 0.1), eff.up) : setPen(eff.down, r1(eff.up - 0.1))}>−</button>
+          <b>{String(eff[k]).replace('.', ',')}</b>
+          <button className="m-btn small" disabled={running} onClick={() => k === 'down' ? setPen(r1(eff.down + 0.1), eff.up) : setPen(eff.down, r1(eff.up + 0.1))}>＋</button>
+        </div>
+      ))}
+      {Math.abs(eff.down - eff.up) < 1.5 && <div className="m-hint warn">Между «пишет» и «поднята» всего {r1(Math.abs(eff.down - eff.up))} мм — ручка может цеплять бумагу. Лучше 3–5 мм.</div>}
+      <div className="m-stepper">
+        <span>Пауза после опускания</span>
+        <div className="m-seg small" style={{ flex: '0 0 auto' }}>
+          {[0, 0.1, 0.2, 0.3].map((d) => <button key={d} className={st.penDelay === d ? 'on' : ''} disabled={running} onClick={() => set({ penDelay: d })}>{d ? String(d).replace('.', ',') : 'нет'}</button>)}
+        </div>
+      </div>
+      <div className="m-grid2">
+        <button className="m-btn" disabled={off} onClick={() => guard(() => send([prof.penUp, prof.penDown, 'G91', `G1 X20 F${MAX_F}`, 'G90', prof.penUp, 'G91', `G1 X-20 F${MAX_F}`, 'G90'].join('\n')))}>Тест: линия 2 см</button>
+        <button className="m-btn" disabled={running} onClick={() => { set({ zDown: PEN_DEFAULT.down, zUp: PEN_DEFAULT.up, swap: false, penDelay: 0 }); setMsg({ text: 'Высота ручки: как было (3 и −1,5)' }); }}>Как было</button>
       </div>
 
       <div className="m-section">Вид и сигналы</div>

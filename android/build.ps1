@@ -28,7 +28,7 @@ Copy-Item "$here\AndroidManifest.xml" "$w\AndroidManifest.xml"
 & "$bt\aapt2.exe" compile --dir "$w\res" -o "$w\res.zip"
 if ($LASTEXITCODE) { throw 'aapt2 compile' }
 & "$bt\aapt2.exe" link -I $androidJar --manifest "$w\AndroidManifest.xml" -R "$w\res.zip" `
-  --java "$w\gen" --min-sdk-version 24 --target-sdk-version 34 --version-code 6 --version-name 1.5 -o "$w\app.unsigned.apk"
+  --java "$w\gen" --min-sdk-version 24 --target-sdk-version 34 --version-code 8 --version-name 1.7 -o "$w\app.unsigned.apk"
 if ($LASTEXITCODE) { throw 'aapt2 link' }
 
 # 3. Java → dex

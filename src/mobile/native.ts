@@ -1,4 +1,6 @@
 // Телефон: голос, вибрация, звук и распознавание текста с фото.
+import { recognizeCanvases } from '../core/ocr';
+export { cleanOcr } from '../core/ocr';
 
 interface NativeBridge {
   voice?(): void;
@@ -152,31 +154,7 @@ async function loadImage(file: File, maxSide = 2000): Promise<HTMLCanvasElement>
   } finally { URL.revokeObjectURL(url); }
 }
 
-/** Убрать переносы строк внутри абзацев, склеить слова с дефисом-переносом. */
-export function cleanOcr(text: string): string {
-  return text
-    .replace(/\r/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/([A-Za-zА-Яа-яЁё])-\n([a-zа-яё])/g, '$1$2').replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n');
-}
-
 export async function recognizePhoto(file: File, onProgress: (p: number) => void): Promise<string> {
   const canvas = await loadImage(file);
-  const { createWorker } = await import('tesseract.js');
-  const base = new URL('./ocr/', location.href).href;
-  const worker = await createWorker('rus', 1, {
-    workerPath: base + 'worker.min.js',
-    corePath: base + 'tesseract-core-lstm.wasm.js',
-    langPath: base.replace(/\/$/, ''),
-    workerBlobURL: false,
-    cacheMethod: 'none',
-    logger: (m: { status: string; progress: number }) => { if (m.status === 'recognizing text') onProgress(m.progress); },
-  });
-  try {
-    const { data } = await worker.recognize(canvas);
-    return cleanOcr(data.text);
-  } finally { await worker.terminate(); }
+  return recognizeCanvases([canvas], onProgress);
 }
