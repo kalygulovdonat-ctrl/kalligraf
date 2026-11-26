@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CH340 / CH341 (GUANGKU) -->
+    <usb-device vendor-id="6790" />
+    <!-- Arduino -->
+    <usb-device vendor-id="9025" />
+    <usb-device vendor-id="10755" />
+</resources>

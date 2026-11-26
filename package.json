@@ -1,0 +1,34 @@
+{
+  "name": "kalligraf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "build-fonts": "vite-node scripts/build-fonts.ts",
+    "dev:mobile": "node scripts/copy-ocr.mjs && vite -c vite.mobile.config.ts",
+    "build:mobile": "node scripts/copy-ocr.mjs && vite build -c vite.mobile.config.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^0.453.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/rus": "^1.0.0",
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/w3c-web-serial": "^1.0.7",
+    "@vitejs/plugin-react": "^4.3.3",
+    "jsqr": "^1.4.0",
+    "tesseract.js": "^7.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

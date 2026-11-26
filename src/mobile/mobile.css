@@ -1,0 +1,93 @@
+/* Каллиграф для телефона: крупные кнопки, одна колонка. */
+:root {
+  --bg: #f4f2ec; --card: #ffffff; --ink: #1d1f33; --muted: #6b6f80; --line: #dcd8cc;
+  --accent: #3b3fb8; --accent-ink: #fff; --danger: #d63a3a; --warn: #b7791f; --ok: #2f9e44;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #15161f; --card: #1f2130; --ink: #ececf4; --muted: #9a9db0; --line: #33364a; --accent: #8e93ff; --accent-ink: #15161f; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #15161f; --card: #1f2130; --ink: #ececf4; --muted: #9a9db0; --line: #33364a; --accent: #8e93ff; --accent-ink: #15161f; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+button, select, textarea, input { font: inherit; color: inherit; }
+
+.m-app { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 150px; }
+.m-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top)); background: var(--card); border-bottom: 1px solid var(--line); }
+.m-top b { font-size: 18px; margin-right: auto; }
+.m-dot { width: 10px; height: 10px; border-radius: 50%; background: #999; }
+.m-dot.on { background: var(--ok); } .m-dot.warn { background: var(--danger); }
+.m-state { font-size: 14px; color: var(--muted); }
+
+.m-main { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.m-btn { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; min-height: 48px;
+  font-weight: 600; cursor: pointer; touch-action: manipulation; }
+.m-btn:active:not(:disabled) { transform: scale(.97); }
+.m-btn:disabled { opacity: .45; }
+.m-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.m-btn.danger { background: var(--danger); color: #fff; border-color: transparent; }
+.m-btn.small { min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
+.m-btn.big { flex: 1; min-height: 56px; font-size: 18px; }
+
+.m-seg { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.m-seg button { flex: 1; border: 0; background: transparent; border-radius: 9px; padding: 10px 6px; font-weight: 600; min-height: 44px; }
+.m-seg button.on { background: var(--accent); color: var(--accent-ink); }
+.m-seg.small button { padding: 6px 4px; min-height: 38px; font-size: 14px; }
+
+.m-text { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--card); min-height: 110px; }
+.m-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.m-row select { flex: 1 1 160px; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--card); }
+.m-row .m-seg { flex: 1 1 200px; }
+
+.m-sheet-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.m-sheet { width: 100%; height: auto; display: block; }
+
+.m-hint { font-size: 14px; color: var(--muted); }
+.m-hint.warn { color: var(--warn); }
+.m-slider { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.m-slider input { width: 100%; accent-color: var(--accent); height: 32px; }
+
+.m-progress { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.m-bar { flex: 1; height: 10px; background: var(--line); border-radius: 6px; overflow: hidden; }
+.m-bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+
+.m-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 14px 0; padding: 10px 12px;
+  border-radius: 12px; background: #fff3bf; color: #5c4400; font-weight: 600; }
+.m-banner.warn { background: #ffe3e3; color: #8a1c1c; }
+
+.m-actions { position: fixed; left: 0; right: 0; bottom: 58px; display: flex; gap: 8px; padding: 8px 14px; background: var(--bg); }
+.m-tabs { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom); }
+.m-tabs button { flex: 1; border: 0; background: transparent; min-height: 58px; font-weight: 600; color: var(--muted); }
+.m-tabs button.on { color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+
+.m-pult { display: flex; flex-direction: column; gap: 12px; }
+.m-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 320px; margin: 0 auto; width: 100%; }
+.m-pad .m-btn { min-height: 72px; font-size: 26px; }
+.m-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.m-demo { position: fixed; right: 12px; bottom: 132px; border: 0; background: transparent; color: var(--muted); text-decoration: underline; font-size: 13px; }
+.m-toast { position: fixed; left: 14px; right: 14px; top: 70px; z-index: 20; padding: 12px 14px; border-radius: 12px;
+  background: var(--ok); color: #fff; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+.m-toast.bad { background: var(--danger); }
+
+/* крупный шрифт — всё приложение чуть больше */
+html.m-big body { zoom: 1.18; }
+
+.m-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.m-tools .m-btn { flex: 1 1 auto; }
+.m-btn.on { border-color: var(--accent); color: var(--accent); }
+.m-saved { display: flex; flex-direction: column; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.m-saved-row { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); }
+.m-link { flex: 1; text-align: left; border: 0; background: transparent; padding: 10px 4px; min-height: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-x { border: 0; background: transparent; color: var(--muted); min-width: 44px; min-height: 44px; font-size: 16px; }
+.m-stepper { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.m-stepper span { flex: 1; }
+.m-stepper b { min-width: 28px; text-align: center; font-size: 18px; }
+.m-stepper .m-btn { min-width: 48px; font-size: 18px; }
+.m-section { font-weight: 700; margin-top: 8px; }
+.m-banner.info { background: #e7f0ff; color: #1c3a8a; flex-wrap: wrap; }
+.m-banner small { display: block; font-weight: 400; margin-top: 2px; }
+.m-banner-btns { display: flex; gap: 6px; }

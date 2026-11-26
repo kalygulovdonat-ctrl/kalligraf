@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-mobile/
+mobile/public/ocr/
+*.tsbuildinfo
+*.keystore
+*.jks
+android/Kalligraf.apk
