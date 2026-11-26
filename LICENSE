@@ -1,0 +1,32 @@
+Каллиграф
+© 2026 kalygulovdonat-ctrl (https://github.com/kalygulovdonat-ctrl). Все права защищены.
+
+Исходный код, сборки программы (сайт и приложение для Android) и сопровождающие материалы
+принадлежат автору. Без письменного разрешения автора запрещено:
+  - копировать и публиковать этот код или его части в других репозиториях и на других сайтах;
+  - выдавать программу или её части за свою работу, удалять или менять указание автора;
+  - распространять изменённые версии и использовать код в коммерческих целях.
+
+Разрешено: просматривать код на GitHub, пользоваться программой по ссылке
+https://kalygulovdonat-ctrl.github.io/kalligraf/ и устанавливать приложение из раздела Releases
+для личного использования.
+
+Сторонние компоненты распространяются по своим лицензиям: рукописные шрифты в папке fonts-src —
+SIL Open Font License (тексты лицензий лежат рядом со шрифтами); библиотеки из package.json —
+по лицензиям их авторов.
+
+------------------------------------------------------------------------------------------------
+
+Kalligraf
+Copyright (c) 2026 kalygulovdonat-ctrl (https://github.com/kalygulovdonat-ctrl). All rights reserved.
+
+The source code, builds (website and Android app) and accompanying materials are the property
+of the author. Without the author's written permission you may not copy or republish this code
+or any part of it, present it as your own work, remove or alter the author attribution,
+distribute modified versions, or use it commercially.
+
+You may view the code on GitHub, use the program at https://kalygulovdonat-ctrl.github.io/kalligraf/
+and install the app from Releases for personal use.
+
+Third-party components are covered by their own licenses: handwriting fonts in fonts-src —
+SIL Open Font License; libraries listed in package.json — their respective licenses.

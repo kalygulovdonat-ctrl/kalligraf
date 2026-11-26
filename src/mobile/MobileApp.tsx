@@ -12,6 +12,7 @@ import { GrblController } from '../grbl/controller';
 import { SerialTransport, SimTransport, serialSupported } from '../grbl/transport';
 import { AndroidTransport, androidUsbAvailable } from './androidTransport';
 import { MAX_F, limitLine, limitedTransport, mobileProfile } from './limit';
+import { AUTHOR, COPYRIGHT } from '../author';
 
 // ── Машина ───────────────────────────────────────────────────────────
 
@@ -456,6 +457,7 @@ function Pult({ prof, st, set, running, guard, setMsg }: {
         <button className={'m-btn' + (st.sound ? ' on' : '')} onClick={() => { unlockAudio(); set({ sound: !st.sound }); if (!st.sound) signal('done'); }}>{st.sound ? '✓ ' : ''}Звук и вибрация</button>
       </div>
       <div className="m-hint">Сигнал звучит, когда пора положить новый лист, и когда письмо закончено.</div>
+      <div className="m-hint" style={{ textAlign: 'center', marginTop: 12 }}>Каллиграф · автор <b>{AUTHOR}</b><br />{COPYRIGHT}</div>
     </div>
   );
 }

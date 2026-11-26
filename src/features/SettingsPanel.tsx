@@ -4,6 +4,7 @@ import { resetAll, restoreBackup, snapshot, uid, useApp, useProfile } from '../s
 import { Check, Num, Section, Sel, Txt, downloadText, pickFile } from '../ui/controls';
 import { t, type Lang } from '../i18n';
 import { LOCKED } from '../edition';
+import { AUTHOR, COPYRIGHT, REPO_URL } from '../author';
 
 export function SettingsRight() {
   const s = useApp();
@@ -104,6 +105,9 @@ export function SettingsRight() {
           }}><RotateCcw />{t('Сбросить всё')}</button>
         </div>
       </Section>
+      <div className="hint" style={{ padding: '12px 16px 18px', textAlign: 'center' }}>
+        Каллиграф · автор <b>{AUTHOR}</b> · <a href={REPO_URL} target="_blank" rel="noreferrer">GitHub</a><br />{COPYRIGHT}
+      </div>
     </div>
   );
 }
