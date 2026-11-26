@@ -3,6 +3,36 @@
 interface NativeBridge {
   voice?(): void;
   vibrate?(ms: number): void;
+  print?(html: string, name: string): void;
+  saveFile?(name: string, mime: string, text: string): void;
+}
+
+/** Печать страницы (шаблон почерка). В приложении — системная печать Android (можно «Сохранить как PDF»). */
+export function printHtml(html: string, name: string) {
+  const n = window.KalligrafNative;
+  if (n?.print) { n.print(html, name); return; }
+  const w = window.open('', '_blank');
+  if (!w) throw new Error('Браузер заблокировал окно печати');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+}
+
+/** Сохранить текстовый файл. В приложении — в папку «Загрузки». */
+export function saveText(name: string, mime: string, text: string): Promise<string> {
+  const n = window.KalligrafNative;
+  if (n?.saveFile) {
+    return new Promise((resolve, reject) => {
+      waiters.set('save', (ok, data) => (ok ? resolve(data) : reject(new Error(data))));
+      n.saveFile!(name, mime, text);
+    });
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return Promise.resolve('Загрузки');
 }
 
 declare global {

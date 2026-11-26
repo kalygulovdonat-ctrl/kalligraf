@@ -6,6 +6,8 @@ import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.os.VibrationEffect;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
 import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.speech.RecognizerIntent;
@@ -65,7 +67,9 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams params) {
-                return pickImage(cb);
+                boolean image = false;
+                for (String t : params.getAcceptTypes()) if (t != null && t.startsWith("image")) image = true;
+                return image ? pickImage(cb) : pickAnyFile(cb);
             }
 
             @Override
@@ -225,6 +229,65 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Выбор любого файла (шрифт .ttf или почерк .kfont). */
+    private boolean pickAnyFile(ValueCallback<Uri[]> cb) {
+        if (fileCb != null) fileCb.onReceiveValue(null);
+        fileCb = cb;
+        cameraUri = null;
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
+        try {
+            startActivityForResult(Intent.createChooser(i, "Файл шрифта"), REQ_IMAGE);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            fileCb = null;
+            return false;
+        }
+    }
+
+    /** Печать HTML через системную печать Android (принтер или «Сохранить как PDF»). */
+    private WebView printView;
+    private void printHtml(String html, String name) {
+        WebView pv = new WebView(this);
+        printView = pv; // держим ссылку, пока идёт печать
+        pv.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                PrintAttributes attrs = new PrintAttributes.Builder()
+                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS).build();
+                pm.print(name, view.createPrintDocumentAdapter(name), attrs);
+            }
+        });
+        pv.loadDataWithBaseURL("https://" + HOST + "/", html, "text/html", "UTF-8", null);
+    }
+
+    /** Сохранить текстовый файл в «Загрузки». */
+    private void saveFile(String name, String mime, String text) {
+        try {
+            byte[] data = text.getBytes(StandardCharsets.UTF_8);
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                cv.put(MediaStore.Downloads.MIME_TYPE, mime);
+                Uri u = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (u == null) throw new IOException("нет доступа к «Загрузкам»");
+                try (java.io.OutputStream os = getContentResolver().openOutputStream(u)) {
+                    if (os == null) throw new IOException("нет доступа к «Загрузкам»");
+                    os.write(data);
+                }
+                emitNative("save", "Загрузки/" + name);
+            } else {
+                java.io.File dir = getExternalFilesDir(null);
+                java.io.File f = new java.io.File(dir, name);
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) { os.write(data); }
+                emitNative("save", f.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            emitNative("save-error", "Не удалось сохранить: " + e.getMessage());
+        }
+    }
+
     /** Выбор фото: камера или галерея. */
     private boolean pickImage(ValueCallback<Uri[]> cb) {
         if (fileCb != null) fileCb.onReceiveValue(null);
@@ -279,6 +342,12 @@ public class MainActivity extends Activity {
     private final class NativeBridge {
         @JavascriptInterface
         public void voice() { ui.post(MainActivity.this::startVoice); }
+
+        @JavascriptInterface
+        public void print(String html, String name) { ui.post(() -> printHtml(html, name)); }
+
+        @JavascriptInterface
+        public void saveFile(String name, String mime, String text) { new Thread(() -> MainActivity.this.saveFile(name, mime, text)).start(); }
 
         @JavascriptInterface
         public void vibrate(int ms) {

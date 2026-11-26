@@ -1,6 +1,7 @@
 // Каллиграф для телефона: только «Писать» (A4 / тетрадь) и «Пульт». Скорость машины ≤ 2000 мм/мин.
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { builtinFonts } from '../core/font';
+import { builtinFonts, type Font } from '../core/font';
+import { FontsTab } from './FontsTab';
 import { layoutText, defaultTextOptions, type TextOptions } from '../core/layout';
 import { optimizePaths, defaultOptimize } from '../core/optimize';
 import { boundsGcode, estimateJob, formatDuration, generateGcode, type MachineProfile } from '../core/gcode';
@@ -51,6 +52,10 @@ const DEFAULTS: Settings = {
 };
 const KEY = 'kalligraf-mobile';
 const RESUME_KEY = 'kalligraf-mobile-resume';
+const FONTS_KEY = 'kalligraf-mobile-fonts';
+function loadFonts(): Font[] {
+  try { const a = JSON.parse(localStorage.getItem(FONTS_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
 function loadSettings(): Settings {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return DEFAULTS; }
 }
@@ -101,8 +106,8 @@ function svgD(paths: Path[]) {
   return d;
 }
 
-function prepare(st: Snap, prof: MachineProfile) {
-  const fonts = builtinFonts();
+function prepare(st: Snap, prof: MachineProfile, userFonts: Font[] = []) {
+  const fonts = [...builtinFonts(), ...userFonts];
   const font = fonts.find((f) => f.id === st.fontId) ?? fonts[0];
   const sheet = SHEETS[st.fmt];
   // «Начать со строки N»: пропускаем N−1 строк только на первом листе
@@ -119,7 +124,9 @@ function prepare(st: Snap, prof: MachineProfile) {
 
 export function MobileApp() {
   const [st, setSt] = useState<Settings>(loadSettings);
-  const [tab, setTab] = useState<'write' | 'pult'>('write');
+  const [tab, setTab] = useState<'write' | 'fonts' | 'pult'>('write');
+  const [userFonts, setUserFonts] = useState<Font[]>(loadFonts);
+  useEffect(() => { try { localStorage.setItem(FONTS_KEY, JSON.stringify(userFonts)); } catch { setMsg({ text: 'Мало места: почерк не сохранён', bad: true }); } }, [userFonts]);
   const [page, setPage] = useState(0);
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -130,7 +137,7 @@ export function MobileApp() {
 
   const prof = useMemo(() => mobileProfile(MAX_F, st.swap), [st.swap]); // скорость всегда максимальная (2000)
   const deferred = useDeferredValue(st);
-  const job = useMemo(() => prepare(deferred, prof), [deferred, prof]);
+  const job = useMemo(() => prepare(deferred, prof, userFonts), [deferred, prof, userFonts]);
   const pg = Math.min(page, job.pages.length - 1);
   const sheet = SHEETS[st.fmt];
 
@@ -218,7 +225,7 @@ export function MobileApp() {
   function continueResume() {
     if (!resume) return;
     const rprof = mobileProfile(MAX_F, resume.snap.swap);
-    const full = prepare(resume.snap, rprof).lines;
+    const full = prepare(resume.snap, rprof, userFonts).lines;
     const plan = resumePlan(full, resume.acked, rprof);
     startJob(plan.lines, { kind: 'write', snap: resume.snap, headLen: plan.headLen, from: plan.from, total: full.length });
   }
@@ -253,7 +260,7 @@ export function MobileApp() {
   }, [st.theme, st.big]);
 
   const pct = pr ? Math.round((pr.acked / Math.max(1, pr.total)) * 100) : 0;
-  const fonts = builtinFonts().filter((f) => !f.id.startsWith('drafting'));
+  const fonts = [...builtinFonts().filter((f) => !f.id.startsWith('drafting')), ...userFonts];
   const maxLine = Math.floor((sheet.h - (st.fmt === 'nb' ? 15 : 20)) / SIZES[st.fmt][st.size][1]);
 
   return (
@@ -372,6 +379,8 @@ export function MobileApp() {
               </div>
             )}
           </>
+        ) : tab === 'fonts' ? (
+          <FontsTab userFonts={userFonts} setUserFonts={setUserFonts} fontId={st.fontId} onUse={(id) => set({ fontId: id })} setMsg={setMsg} />
         ) : (
           <Pult prof={prof} st={st} set={set} running={running} guard={guard} setMsg={setMsg} />
         )}
@@ -387,6 +396,7 @@ export function MobileApp() {
       </footer>
       <nav className="m-tabs">
         <button className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>✎ Писать</button>
+        <button className={tab === 'fonts' ? 'on' : ''} onClick={() => setTab('fonts')}>✍ Почерки</button>
         <button className={tab === 'pult' ? 'on' : ''} onClick={() => setTab('pult')}>✥ Пульт</button>
       </nav>
       {!c.connected && !androidUsbAvailable() && <button className="m-demo" onClick={demo}>демо без машины</button>}

@@ -73,9 +73,14 @@ export function templateSvg(page: number, chars: string[]): string {
 export function printTemplates(pages: number, set: string = HANDWRITING_SET) {
   const w = window.open('', '_blank');
   if (!w) throw new Error('Браузер заблокировал окно печати. Разрешите всплывающие окна для этого сайта.');
-  const svgs = Array.from({ length: pages }, (_, p) => `<div class="pg">${templateSvg(p, templateChars(p, set))}</div>`).join('');
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Шаблон почерка — Каллиграф</title>
-<style>@page{size:A4;margin:0}html,body{margin:0}.pg{width:210mm;height:297mm;page-break-after:always;overflow:hidden}.pg svg{display:block}</style>
-</head><body>${svgs}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.write(templatesHtml(pages, set, true));
   w.document.close();
+}
+
+/** HTML со страницами шаблона для печати (A4, без полей, масштаб 100%). */
+export function templatesHtml(pages: number, set: string = HANDWRITING_SET, autoPrint = false): string {
+  const svgs = Array.from({ length: pages }, (_, p) => `<div class="pg">${templateSvg(p, templateChars(p, set))}</div>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Шаблон почерка — Каллиграф</title>
+<style>@page{size:A4;margin:0}html,body{margin:0}.pg{width:210mm;height:297mm;page-break-after:always;overflow:hidden}.pg svg{display:block}</style>
+</head><body>${svgs}${autoPrint ? '<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>' : ''}</body></html>`;
 }
